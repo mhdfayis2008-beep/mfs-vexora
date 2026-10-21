@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="MFS VEXORA — Discover. Click. Shop.">
+<title>MFS VEXORA — Discover. Click. Shop.</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🛒%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="splash"><div class="l">MFS <b>VEXORA</b></div><div class="t">Discover. Click. Shop.</div><div class="bar"><i></i></div></div>
+
+<header>
+  <div class="top">
+    <a class="logo" href="#" aria-label="MFS VEXORA home">MFS <b>VEXORA</b></a>
+    <form class="search" id="sf" role="search">
+      <select id="scat" aria-label="Category"></select>
+      <input id="q" type="search" placeholder="Search MFS VEXORA" aria-label="Search products">
+      <button type="submit">Search</button>
+    </form>
+    <div class="acct">
+      <button class="hbtn" id="acct"><small>Hello, sign in</small>Account</button>
+      <button class="hbtn" id="menu">☰ Menu</button>
+    </div>
+  </div>
+  <nav class="cats" id="nav" aria-label="Categories"></nav>
+</header>
+
+<section class="hero"><h1>MFS VEXORA</h1><p>Discover. Click. Shop. — Great deals, one click away.</p></section>
+
+<main>
+  <div class="bar2">
+    <h2 id="title">All products</h2>
+    <label>Sort by <select id="sort">
+      <option value="rel">Featured</option>
+      <option value="asc">Price: Low to High</option>
+      <option value="desc">Price: High to Low</option>
+    </select></label>
+  </div>
+  <div class="grid" id="grid"></div>
+  <div id="empty"></div>
+</main>
+
+<footer><b>MFS VEXORA</b> — Discover. Click. Shop.<br>Buy Now opens the seller’s own page. We don’t take payments or orders here.</footer>
+
+<div class="modal" id="m">
+  <div class="panel" id="mp"></div>
+</div>
+<div id="toast" role="status"></div>
+<script src="products.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
