@@ -1,38 +1,217 @@
+
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MFS VEXORA — Product helper</title><link rel="stylesheet" href="style.css"></head>
-<body style="padding:14px"><div class="panel" style="margin:0 auto">
-<h3>MFS VEXORA product helper</h3>
-<p class="note">Offline tool: fill in the form, preview the card, then copy the generated entry into <b>products.js</b>. Nothing is uploaded or saved here. Put the photo file in the <b>images/</b> folder with the filename shown.</p>
-<div class="f">
-<div class="w"><label class="note">Product photo (for preview and filename)</label><input class="pw" id="fi" type="file" accept="image/*"></div>
-<input class="w" id="fn" placeholder="Product name"><input id="fp" type="number" min="0" step="0.01" placeholder="Price (₹)"><input id="fs" type="number" min="0" step="0.01" placeholder="Discount price (₹, optional)">
-<input class="w" id="fc" placeholder="Category"><textarea class="w" id="fd" placeholder="Short description"></textarea><input class="w" id="fu" type="url" placeholder="Buy Now URL (https://...)">
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MFS VEXORA Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+body{font-family:Arial,sans-serif;max-width:650px;margin:25px auto;padding:16px;background:#f5f5f5;color:#222}
+.panel{background:white;padding:20px;border-radius:14px;box-shadow:0 2px 12px #ddd}
+input,textarea,button{box-sizing:border-box;width:100%;padding:12px;margin:7px 0;border:1px solid #ccc;border-radius:8px;font-size:16px}
+button{background:#6d28d9;color:white;border:0;font-weight:bold}
+.item{border:1px solid #ddd;border-radius:10px;padding:12px;margin:12px 0}
+img{max-width:100%;height:100px;object-fit:contain}
+.hidden{display:none}
+#msg{white-space:pre-wrap;overflow-wrap:anywhere}
+</style>
+</head>
+<body>
+<div class="panel">
+<h2>MFS VEXORA Admin</h2>
+<p id="msg">Add your Supabase project details in this file first.</p>
+
+<section id="login">
+<h3>Admin Login</h3>
+<input id="email" type="email" placeholder="Admin email">
+<input id="password" type="password" placeholder="Password">
+<button id="loginBtn">Login</button>
+</section>
+
+<section id="dashboard" class="hidden">
+<button id="logoutBtn">Logout</button>
+<h3>Add Product</h3>
+<form id="productForm">
+<input id="name" placeholder="Product name" required>
+<input id="price" type="number" min="0.01" step="0.01" placeholder="Price (₹)" required>
+<input id="sale" type="number" min="0" step="0.01" placeholder="Discount price (optional)">
+<input id="category" placeholder="Category">
+<textarea id="description" placeholder="Description"></textarea>
+<input id="buyurl" type="url" placeholder="Buy Now URL (https://...)" required>
+<label>Product photo (max 5 MB)</label>
+<input id="photo" type="file" accept="image/jpeg,image/png,image/webp">
+<button type="submit">Save Product</button>
+</form>
+<h3>Products</h3>
+<div id="products"></div>
+</section>
 </div>
-<div class="pv" id="pv"></div><div class="msg" id="msg"></div>
-<p class="note">Copy this entry into products.js (inside the list, with a comma between products):</p>
-<textarea class="pw" id="out" rows="11" readonly></textarea><br><br>
-<button class="sm p" id="cp">Copy entry</button> <a class="sm" href="index.html">View website</a>
-</div>
+
 <script>
-const $=id=>document.getElementById(id);
-const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const money=n=>"₹"+Number(n).toLocaleString("en-IN",{maximumFractionDigits:2});
-function safeUrl(u){try{const x=new URL(u);return(x.protocol==="https:"||x.protocol==="http:")?x.href:""}catch(e){return""}}
-let fname="",prev="";
-const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"product";
-function upd(){
- const n=$("fn").value.trim(),p=parseFloat($("fp").value)||0,s=parseFloat($("fs").value)||0,u=safeUrl($("fu").value.trim());
- const d=s>0&&s<p?Math.round((1-s/p)*100):0,img=fname?"images/"+fname:"";
- $("pv").innerHTML=`<article class="card" style="max-width:240px"><div class="img">${d?`<span class="badge">-${d}%</span>`:""}${prev?`<img src="${prev}" alt="">`:'<div class="ph">No image</div>'}</div><div class="body"><span class="cat">${esc($("fc").value||"General")}</span><h3 class="name">${esc(n||"Product name")}</h3><div class="price"><span class="now">${money(d?s:p)}</span>${d?`<span class="old">${money(p)}</span>`:""}</div><p class="desc">${esc($("fd").value)}</p><span class="buy">Buy Now</span></div></article>`;
- const e={id:slug(n)+"-"+Date.now().toString(36),name:n,price:p,sale:s&&s<p?s:0,category:$("fc").value.trim()||"General",description:$("fd").value.trim(),image:img,url:u,published:true};
- $("out").value=JSON.stringify(e,null,2);
- const m=$("msg");const err=!n?"Enter a name.":p<=0?"Enter a price.":s>=p&&s?"Discount price must be lower than the price.":!u?"Enter a valid https:// link.":"";
- m.className=err?"msg er":"msg ok";m.textContent=err||"Looks good."+(fname?" Save the photo as images/"+fname:"");
+const PROJECT_URL = "https://srlidlsnyqkhecfwxkax.supabase.co/rest/v1/";
+const PUBLISHABLE_KEY = "sb_publishable_3y2ZYBrmubSRI_iAaOLsHQ_7W4OF1OW";
+
+const msg = document.getElementById("msg");
+const clientReady =
+  PROJECT_URL.startsWith("https://") &&
+  !PROJECT_URL.includes("YOUR_PROJECT_URL") &&
+  !PUBLISHABLE_KEY.includes("YOUR_PUBLISHABLE_KEY");
+
+let db = null;
+
+if (clientReady && window.supabase) {
+  db = window.supabase.createClient(PROJECT_URL, PUBLISHABLE_KEY);
+  msg.textContent = "Supabase ready. Sign in with your admin account.";
+} else {
+  msg.textContent = "Setup required: replace YOUR_PROJECT_URL and YOUR_PUBLISHABLE_KEY.";
 }
-["fn","fp","fs","fc","fd","fu"].forEach(i=>$(i).oninput=upd);
-$("fi").onchange=e=>{const f=e.target.files[0];if(!f)return;if(!f.type.startsWith("image/")||f.size>5*1024*1024){$("msg").className="msg er";$("msg").textContent="Choose an image under 5 MB.";return}
- fname=slug($("fn").value||f.name.replace(/\.[^.]+$/,""))+"."+(f.name.split(".").pop().toLowerCase().replace(/[^a-z0-9]/g,"")||"jpg");prev=URL.createObjectURL(f);upd()};
-$("cp").onclick=async()=>{try{await navigator.clipboard.writeText($("out").value)}catch(e){$("out").select();document.execCommand("copy")}$("cp").textContent="Copied!"};
-upd();
-</script></body></html>
+
+const $ = id => document.getElementById(id);
+const say = text => { msg.textContent = text; };
+
+function showDashboard(signedIn) {
+  $("login").classList.toggle("hidden", signedIn);
+  $("dashboard").classList.toggle("hidden", !signedIn);
+}
+
+async function loadProducts() {
+  const {data, error} = await db
+    .from("products")
+    .select("*")
+    .order("created_at", {ascending:false});
+
+  if (error) { say("Could not load products: " + error.message); return; }
+
+  $("products").innerHTML = "";
+  (data || []).forEach(p => {
+    const div = document.createElement("div");
+    div.className = "item";
+    const title = document.createElement("strong");
+    title.textContent = p.name + " — ₹" + p.price;
+    div.appendChild(title);
+
+    if (p.image_path) {
+      const img = document.createElement("img");
+      img.src = p.image_path;
+      img.alt = p.name;
+      div.appendChild(document.createElement("br"));
+      div.appendChild(img);
+    }
+
+    const status = document.createElement("p");
+    status.textContent = p.published ? "Published" : "Hidden";
+    div.appendChild(status);
+
+    const del = document.createElement("button");
+    del.textContent = "Delete";
+    del.onclick = async () => {
+      if (!confirm("Delete " + p.name + "?")) return;
+      const {error} = await db.from("products").delete().eq("id", p.id);
+      if (error) { say("Delete failed: " + error.message); return; }
+      say("Product deleted.");
+      await loadProducts();
+    };
+    div.appendChild(del);
+    $("products").appendChild(div);
+  });
+
+  if (!data || !data.length) $("products").textContent = "No products yet.";
+}
+
+$("loginBtn").onclick = async () => {
+  if (!db) { say("Please set the Supabase URL and Publishable key first."); return; }
+  const {error} = await db.auth.signInWithPassword({
+    email: $("email").value.trim(),
+    password: $("password").value
+  });
+  if (error) { say("Login failed: " + error.message); return; }
+  showDashboard(true);
+  say("Logged in.");
+  await loadProducts();
+};
+
+$("logoutBtn").onclick = async () => {
+  await db.auth.signOut();
+  showDashboard(false);
+  say("Logged out.");
+};
+
+$("productForm").onsubmit = async e => {
+  e.preventDefault();
+  if (!db) return;
+
+  const name = $("name").value.trim();
+  const price = Number($("price").value);
+  const sale = Number($("sale").value) || 0;
+  const buyUrl = $("buyurl").value.trim();
+
+  if (!/^https?:\/\//i.test(buyUrl)) {
+    say("Enter a valid Buy Now URL.");
+    return;
+  }
+  if (!(price > 0) || (sale > 0 && sale >= price)) {
+    say("Check the price and discount price.");
+    return;
+  }
+
+  say("Saving product...");
+
+  let imagePath = "";
+  const file = $("photo").files[0];
+
+  if (file) {
+    if (!["image/jpeg","image/png","image/webp"].includes(file.type) ||
+        file.size > 5 * 1024 * 1024) {
+      say("Choose a JPG, PNG, or WebP image under 5 MB.");
+      return;
+    }
+
+    const ext = file.type === "image/png" ? "png" :
+                file.type === "image/webp" ? "webp" : "jpg";
+    const path = Date.now() + "-" + Math.random().toString(36).slice(2) + "." + ext;
+
+    const {error: uploadError} = await db.storage
+      .from("product-images")
+      .upload(path, file, {contentType:file.type, upsert:false});
+
+    if (uploadError) { say("Photo upload failed: " + uploadError.message); return; }
+
+    imagePath = db.storage.from("product-images").getPublicUrl(path).data.publicUrl;
+  }
+
+  const product = {
+    name,
+    price,
+    sale_price: sale > 0 ? sale : 0,
+    category: $("category").value.trim() || "General",
+    description: $("description").value.trim(),
+    buy_url: buyUrl,
+    published: true
+  };
+
+  if (imagePath) product.image_path = imagePath;
+
+  const {error} = await db.from("products").insert(product);
+  if (error) {
+    say("Save failed: " + error.message);
+    return;
+  }
+
+  $("productForm").reset();
+  say("Product saved to Supabase!");
+  await loadProducts();
+};
+
+if (db) {
+  db.auth.getSession().then(async ({data}) => {
+    if (data.session) {
+      showDashboard(true);
+      await loadProducts();
+    }
+  });
+}
+</script>
+</body>
+</html>
+
