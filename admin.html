@@ -1,38 +1,342 @@
+
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MFS VEXORA — Product helper</title><link rel="stylesheet" href="style.css"></head>
-<body style="padding:14px"><div class="panel" style="margin:0 auto">
-<h3>MFS VEXORA product helper</h3>
-<p class="note">Offline tool: fill in the form, preview the card, then copy the generated entry into <b>products.js</b>. Nothing is uploaded or saved here. Put the photo file in the <b>images/</b> folder with the filename shown.</p>
-<div class="f">
-<div class="w"><label class="note">Product photo (for preview and filename)</label><input class="pw" id="fi" type="file" accept="image/*"></div>
-<input class="w" id="fn" placeholder="Product name"><input id="fp" type="number" min="0" step="0.01" placeholder="Price (₹)"><input id="fs" type="number" min="0" step="0.01" placeholder="Discount price (₹, optional)">
-<input class="w" id="fc" placeholder="Category"><textarea class="w" id="fd" placeholder="Short description"></textarea><input class="w" id="fu" type="url" placeholder="Buy Now URL (https://...)">
-</div>
-<div class="pv" id="pv"></div><div class="msg" id="msg"></div>
-<p class="note">Copy this entry into products.js (inside the list, with a comma between products):</p>
-<textarea class="pw" id="out" rows="11" readonly></textarea><br><br>
-<button class="sm p" id="cp">Copy entry</button> <a class="sm" href="index.html">View website</a>
-</div>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MFS VEXORA Admin</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;background:#11111b;color:#f5f5f5;font-family:Arial,sans-serif;padding:18px}
+    main{max-width:700px;margin:auto}
+    h1{color:#a78bfa}
+    .card{background:#202031;padding:18px;border-radius:14px;margin:16px 0}
+    input,textarea,button{width:100%;padding:12px;margin:7px 0;border-radius:8px;border:1px solid #44445b;font-size:16px}
+    input,textarea{background:#151522;color:white}
+    button{background:#8b5cf6;color:white;border:0;font-weight:bold;cursor:pointer}
+    .secondary{background:#44445b}
+    .product{border:1px solid #44445b;padding:12px;border-radius:10px;margin:12px 0;overflow-wrap:anywhere}
+    .product img{width:100%;max-width:220px;display:block;border-radius:8px}
+    .hint{color:#c4b5fd;font-size:14px}
+    #status{white-space:pre-wrap;overflow-wrap:anywhere}
+    [hidden]{display:none!important}
+  </style>
+</head>
+<body>
+<main>
+  <h1>MFS VEXORA</h1>
+  <p>Admin Dashboard</p>
+  <p id="status" role="status">Supabase connection setup ചെയ്യുക.</p>
+
+  <section id="loginBox" class="card">
+    <h2>Admin Login</h2>
+    <form id="loginForm">
+      <input id="email" type="email" placeholder="Admin email" required>
+      <input id="password" type="password" placeholder="Password" required>
+      <button type="submit">Login</button>
+    </form>
+  </section>
+
+  <section id="dashboard" hidden>
+    <button id="logout" class="secondary">Logout</button>
+
+    <div class="card">
+      <h2>Add Product</h2>
+      <form id="productForm">
+        <input id="name" placeholder="Product name" required>
+        <input id="price" type="number" min="0" step="0.01" placeholder="Price (₹)" required>
+        <input id="sale" type="number" min="0" step="0.01" placeholder="Sale price (optional)">
+        <input id="category" placeholder="Category" value="General">
+        <textarea id="description" placeholder="Product description"></textarea>
+        <label for="photo">Product photo (JPG, PNG or WebP; max 5 MB)</label>
+        <input id="photo" type="file" accept="image/jpeg,image/png,image/webp">
+        <input id="buyUrl" type="url" placeholder="Buy Now URL (https://...)" required>
+        <button id="saveBtn" type="submit">Upload & Save Product</button>
+      </form>
+      <p class="hint">Photo upload ചെയ്ത് product Supabase-ൽ save ചെയ്യും.</p>
+    </div>
+
+    <div class="card">
+      <h2>Products</h2>
+      <button id="refresh" class="secondary">Refresh Products</button>
+      <div id="products"></div>
+    </div>
+  </section>
+</main>
+
 <script>
-const $=id=>document.getElementById(id);
-const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const money=n=>"₹"+Number(n).toLocaleString("en-IN",{maximumFractionDigits:2});
-function safeUrl(u){try{const x=new URL(u);return(x.protocol==="https:"||x.protocol==="http:")?x.href:""}catch(e){return""}}
-let fname="",prev="";
-const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"product";
-function upd(){
- const n=$("fn").value.trim(),p=parseFloat($("fp").value)||0,s=parseFloat($("fs").value)||0,u=safeUrl($("fu").value.trim());
- const d=s>0&&s<p?Math.round((1-s/p)*100):0,img=fname?"images/"+fname:"";
- $("pv").innerHTML=`<article class="card" style="max-width:240px"><div class="img">${d?`<span class="badge">-${d}%</span>`:""}${prev?`<img src="${prev}" alt="">`:'<div class="ph">No image</div>'}</div><div class="body"><span class="cat">${esc($("fc").value||"General")}</span><h3 class="name">${esc(n||"Product name")}</h3><div class="price"><span class="now">${money(d?s:p)}</span>${d?`<span class="old">${money(p)}</span>`:""}</div><p class="desc">${esc($("fd").value)}</p><span class="buy">Buy Now</span></div></article>`;
- const e={id:slug(n)+"-"+Date.now().toString(36),name:n,price:p,sale:s&&s<p?s:0,category:$("fc").value.trim()||"General",description:$("fd").value.trim(),image:img,url:u,published:true};
- $("out").value=JSON.stringify(e,null,2);
- const m=$("msg");const err=!n?"Enter a name.":p<=0?"Enter a price.":s>=p&&s?"Discount price must be lower than the price.":!u?"Enter a valid https:// link.":"";
- m.className=err?"msg er":"msg ok";m.textContent=err||"Looks good."+(fname?" Save the photo as images/"+fname:"");
+const PROJECT_URL = "https://srlidlsnyqkhecfwxkax.supabase.co/rest/v1/";
+const PUBLISHABLE_KEY = "sb_publishable_3y2ZYBrmubSRI_iAaOLsHQ_7W4OF1OW";
+
+const statusBox = document.getElementById("status");
+const loginBox = document.getElementById("loginBox");
+const dashboard = document.getElementById("dashboard");
+const productList = document.getElementById("products");
+
+let db = null;
+let busy = false;
+
+function status(message) {
+  statusBox.textContent = message;
 }
-["fn","fp","fs","fc","fd","fu"].forEach(i=>$(i).oninput=upd);
-$("fi").onchange=e=>{const f=e.target.files[0];if(!f)return;if(!f.type.startsWith("image/")||f.size>5*1024*1024){$("msg").className="msg er";$("msg").textContent="Choose an image under 5 MB.";return}
- fname=slug($("fn").value||f.name.replace(/\.[^.]+$/,""))+"."+(f.name.split(".").pop().toLowerCase().replace(/[^a-z0-9]/g,"")||"jpg");prev=URL.createObjectURL(f);upd()};
-$("cp").onclick=async()=>{try{await navigator.clipboard.writeText($("out").value)}catch(e){$("out").select();document.execCommand("copy")}$("cp").textContent="Copied!"};
-upd();
-</script></body></html>
+
+function showDashboard(isLoggedIn) {
+  loginBox.hidden = isLoggedIn;
+  dashboard.hidden = !isLoggedIn;
+}
+
+function safeText(tag, value) {
+  const el = document.createElement(tag);
+  el.textContent = value == null ? "" : String(value);
+  return el;
+}
+
+async function init() {
+  if (!PROJECT_URL.startsWith("https://") ||
+      PROJECT_URL.includes("YOUR_PROJECT_URL") ||
+      !PUBLISHABLE_KEY ||
+      PUBLISHABLE_KEY.includes("YOUR_PUBLISHABLE_KEY")) {
+    status("ആദ്യം PROJECT_URL, PUBLISHABLE_KEY എന്നിവ നിങ്ങളുടെ Supabase വിവരങ്ങൾ ഉപയോഗിച്ച് മാറ്റുക.");
+    return;
+  }
+
+  try {
+    db = window.supabase.createClient(PROJECT_URL, PUBLISHABLE_KEY);
+    const { data, error } = await db.auth.getSession();
+    if (error) throw error;
+
+    if (data.session) {
+      await verifyAdmin();
+    } else {
+      showDashboard(false);
+      status("Admin email, password ഉപയോഗിച്ച് Login ചെയ്യുക.");
+    }
+
+    db.auth.onAuthStateChange((event, session) => {
+      if (!session) {
+        showDashboard(false);
+        status("Login ചെയ്യുക.");
+      }
+    });
+  } catch (e) {
+    status("Setup error: " + e.message);
+  }
+}
+
+async function verifyAdmin() {
+  const { data: userData, error: userError } =
+    await db.auth.getUser();
+
+  if (userError || !userData.user) {
+    showDashboard(false);
+    status("Login വീണ്ടും ചെയ്യുക.");
+    return;
+  }
+
+  const { data, error } = await db
+    .from("admins")
+    .select("user_id")
+    .eq("user_id", userData.user.id)
+    .maybeSingle();
+
+  if (error || !data) {
+    await db.auth.signOut();
+    showDashboard(false);
+    status("ഈ അക്കൗണ്ടിന് Admin permission ഇല്ല. Supabase admins table പരിശോധിക്കുക.");
+    return;
+  }
+
+  showDashboard(true);
+  status("Admin login വിജയിച്ചു!");
+  await loadProducts();
+}
+
+document.getElementById("loginForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  if (!db) return status("Supabase connection ആദ്യം setup ചെയ്യുക.");
+
+  status("Login ചെയ്യുന്നു...");
+  const { error } = await db.auth.signInWithPassword({
+    email: document.getElementById("email").value.trim(),
+    password: document.getElementById("password").value
+  });
+
+  if (error) {
+    status("Login error: " + error.message);
+    return;
+  }
+
+  await verifyAdmin();
+});
+
+document.getElementById("logout").addEventListener("click", async () => {
+  await db.auth.signOut();
+  showDashboard(false);
+  status("Logout ചെയ്തു.");
+});
+
+document.getElementById("refresh").addEventListener("click", loadProducts);
+
+async function loadProducts() {
+  if (!db) return;
+
+  productList.replaceChildren(safeText("p", "Loading products..."));
+
+  const { data, error } = await db
+    .from("products")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    productList.replaceChildren();
+    status("Products load error: " + error.message);
+    return;
+  }
+
+  productList.replaceChildren();
+
+  if (!data.length) {
+    productList.append(safeText("p", "Products ഒന്നും ചേർത്തിട്ടില്ല."));
+    return;
+  }
+
+  data.forEach(p => {
+    const card = document.createElement("div");
+    card.className = "product";
+
+    card.append(safeText("h3", p.name));
+    card.append(safeText("p", "Price: ₹" + p.price));
+
+    if (p.sale_price) {
+      card.append(safeText("p", "Sale price: ₹" + p.sale_price));
+    }
+
+    card.append(safeText("p", "Category: " + (p.category || "General")));
+
+    if (p.image_path) {
+      const img = document.createElement("img");
+      img.src = p.image_path;
+      img.alt = p.name;
+      img.loading = "lazy";
+      card.append(img);
+    }
+
+    const del = document.createElement("button");
+    del.textContent = "Delete Product";
+    del.className = "secondary";
+    del.addEventListener("click", async () => {
+      if (!confirm("ഈ product delete ചെയ്യണോ?")) return;
+
+      const { error } = await db
+        .from("products")
+        .delete()
+        .eq("id", p.id);
+
+      if (error) {
+        status("Delete error: " + error.message);
+        return;
+      }
+
+      status("Product delete ചെയ്തു.");
+      await loadProducts();
+    });
+
+    card.append(del);
+    productList.append(card);
+  });
+}
+
+document.getElementById("productForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  if (!db || busy) return;
+
+  busy = true;
+  const saveBtn = document.getElementById("saveBtn");
+  saveBtn.disabled = true;
+
+  let uploadedPath = null;
+
+  try {
+    const name = document.getElementById("name").value.trim();
+    const price = Number(document.getElementById("price").value);
+    const saleText = document.getElementById("sale").value;
+    const salePrice = saleText === "" ? 0 : Number(saleText);
+    const category = document.getElementById("category").value.trim() || "General";
+    const description = document.getElementById("description").value.trim();
+    const buyUrl = document.getElementById("buyUrl").value.trim();
+    const photo = document.getElementById("photo").files[0];
+
+    if (!name || !Number.isFinite(price) || price < 0 ||
+        !Number.isFinite(salePrice) || salePrice < 0) {
+      throw new Error("Product name, price എന്നിവ പരിശോധിക്കുക.");
+    }
+
+    let imageUrl = "";
+
+    if (photo) {
+      const allowed = ["image/jpeg", "image/png", "image/webp"];
+
+      if (!allowed.includes(photo.type)) {
+        throw new Error("JPG, PNG, WebP ഫോട്ടോകൾ മാത്രം അനുവദിക്കും.");
+      }
+
+      if (photo.size > 5 * 1024 * 1024) {
+        throw new Error("Photo 5 MB-ൽ താഴെയാക്കുക.");
+      }
+
+      const ext = photo.type === "image/png" ? "png" :
+                  photo.type === "image/webp" ? "webp" : "jpg";
+
+      uploadedPath = crypto.randomUUID() + "." + ext;
+      status("Photo upload ചെയ്യുന്നു...");
+
+      const { error: uploadError } = await db.storage
+        .from("product-images")
+        .upload(uploadedPath, photo, {
+          contentType: photo.type,
+          upsert: false
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicData } = db.storage
+        .from("product-images")
+        .getPublicUrl(uploadedPath);
+
+      imageUrl = publicData.publicUrl;
+    }
+
+    status("Product save ചെയ്യുന്നു...");
+
+    const { error: insertError } = await db.from("products").insert({
+      name,
+      price,
+      sale_price: salePrice,
+      category,
+      description,
+      image_path: imageUrl,
+      buy_url: buyUrl,
+      published: true
+    });
+
+    if (insertError) throw insertError;
+
+    document.getElementById("productForm").reset();
+    document.getElementById("category").value = "General";
+
+    status("Product Supabase-ൽ save ചെയ്തു!");
+    await loadProducts();
+
+  } catch (e) {
+    status("Error: " + (e.message || "Product save ചെയ്യാനായില്ല."));
+  } finally {
+    busy = false;
+    saveBtn.disabled = false;
+  }
+});
+
+init();
+</script>
+</body>
+</html>
